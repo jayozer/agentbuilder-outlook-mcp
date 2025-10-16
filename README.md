@@ -61,33 +61,63 @@ fastmcp run server.py
 
 ## Multi-Tenant Configuration
 
-This server supports **multi-tenant usage** where each user provides their own Microsoft credentials when calling the `send_outlook_mail` tool.
+This server supports **multi-tenant usage** where each user provides their own Microsoft credentials when calling the `send_outlook_mail` tool. The server itself stores NO credentials - all authentication happens per-request.
 
 ### Two Authentication Methods
 
-#### Method 1: Delegated Access Token (Testing/Personal Use)
+The MCP server supports both personal Microsoft accounts and organizational accounts through two different authentication flows:
 
-Get a token from [Microsoft Graph Explorer](https://developer.microsoft.com/graph/graph-explorer):
-1. Sign in to Graph Explorer
-2. Grant `Mail.Send` permission
-3. Copy the access token from the "Access Token" tab
+#### Method 1: Personal Microsoft Accounts (@outlook.com, @hotmail.com, @live.com)
 
-Call the tool with your token:
+**Best for:** Individual users, testing, personal email automation
+
+**Authentication:** Delegated permissions with user sign-in
+
+**Setup Steps:**
+1. Go to [Microsoft Graph Explorer](https://developer.microsoft.com/graph/graph-explorer)
+2. Sign in with your personal Microsoft account
+3. Run any query (e.g., GET /me)
+4. Grant `Mail.Send` permission when prompted
+5. Click the **"Access token"** tab and copy the token
+6. Use the token in your MCP client:
+
 ```python
 send_outlook_mail(
     subject="Test Email",
-    body="Hello from multi-tenant MCP!",
+    body="Hello from my personal account!",
     to=["recipient@example.com"],
     access_token="EwBIBMl6BAAU...",  # Your Graph Explorer token
-    sender="your.email@example.com"
+    sender="your.personal@outlook.com"
 )
 ```
 
-**Note:** Delegated tokens expire in ~1 hour.
+**Token Format:** Non-JWT proprietary format (starts with `EwB...`, no dots)
+**Expiration:** ~1 hour (must refresh manually)
+**Permissions:** Delegated (acts as the signed-in user)
 
-#### Method 2: Client Credentials (Production/Service)
+**Note:** Personal account tokens use Microsoft's proprietary encrypted format. This is normal and works correctly with the Graph API, despite not being standard JWTs.
 
-Create an Azure AD app registration with `Mail.Send` application permission, then:
+---
+
+#### Method 2: Organizational Accounts (Microsoft 365 / Azure AD)
+
+**Best for:** Production applications, service accounts, automated workflows
+
+**Authentication:** Client credentials (application-only, no user sign-in)
+
+**Prerequisites:**
+- Azure AD tenant with Microsoft 365
+- Exchange Online mailbox provisioned
+- Azure AD app registration
+
+**Setup Steps:** See [AZURE_SETUP.md](./AZURE_SETUP.md) for detailed instructions
+
+**Quick Summary:**
+1. Create Azure AD app registration
+2. Add `Mail.Send` application permission
+3. Grant admin consent
+4. Create client secret
+5. Use credentials in your MCP client:
 
 ```python
 send_outlook_mail(
@@ -97,13 +127,34 @@ send_outlook_mail(
     tenant_id="your-tenant-id",
     client_id="your-client-id",
     client_secret="your-client-secret",
-    sender="mailbox@example.com"
+    sender="user@company.com"  # Must be valid organizational mailbox
 )
 ```
 
-### Single-Tenant Fallback
+**Token Format:** Standard JWT (starts with `eyJ...`, has 3 parts separated by dots)
+**Expiration:** Automatically refreshed by the server
+**Permissions:** Application (app acts independently, not as a user)
 
-For backwards compatibility, if no credential parameters are provided, the server will fall back to environment variables:
+---
+
+### Comparison Table
+
+| Feature | Personal Accounts | Organizational Accounts |
+|---------|------------------|------------------------|
+| **Account Type** | @outlook.com, @hotmail.com, @live.com | @company.com (Microsoft 365) |
+| **Authentication** | Delegated (user sign-in) | Application (client credentials) |
+| **Token Source** | Graph Explorer | Azure AD app registration |
+| **Token Format** | Proprietary (`EwB...`) | JWT (`eyJ...`) |
+| **Token Lifespan** | 1 hour | Auto-renewed |
+| **Best For** | Testing, personal use | Production, automation |
+| **Cost** | Free | Requires M365 license (~$6/month) |
+| **Setup Complexity** | Simple (2 minutes) | Moderate (15 minutes) |
+
+---
+
+### Single-Tenant Fallback (Optional)
+
+For backwards compatibility, if no credential parameters are provided, the server falls back to environment variables:
 
 - `GRAPH_TENANT_ID`
 - `GRAPH_CLIENT_ID`
@@ -111,7 +162,7 @@ For backwards compatibility, if no credential parameters are provided, the serve
 - `GRAPH_DEFAULT_SENDER`
 - `GRAPH_USER_ACCESS_TOKEN`
 
-This allows you to run a single-tenant server where all users share the same Outlook account.
+This allows running a single-tenant server where all users share the same Outlook account. **Not recommended for multi-tenant deployments.**
 
 ## Testing
 ```bash
