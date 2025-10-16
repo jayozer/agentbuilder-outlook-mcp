@@ -23,13 +23,23 @@ class GraphTokenManager:
 
     def __init__(
         self,
-        settings: GraphSettings,
+        settings: Optional[GraphSettings] = None,
         *,
+        tenant_id: Optional[str] = None,
+        client_id: Optional[str] = None,
+        client_secret: Optional[str] = None,
+        access_token: Optional[str] = None,
         http_timeout: float = 15.0,
         clock_skew_buffer: float = 60.0,
         client: Optional[httpx.Client] = None,
     ) -> None:
-        self._settings = settings
+        # Priority: constructor parameters > settings > None
+        # This enables multi-tenant usage where credentials come from tool parameters
+        self._tenant_id = tenant_id or (settings.tenant_id if settings else None)
+        self._client_id = client_id or (settings.client_id if settings else None)
+        self._client_secret = client_secret or (settings.client_secret if settings else None)
+        self._delegated_token = access_token or (settings.delegated_token if settings else None)
+
         self._http_timeout = http_timeout
         self._clock_skew_buffer = clock_skew_buffer
         self._client = client
@@ -47,9 +57,9 @@ class GraphTokenManager:
         Raises:
             GraphAuthError: when token acquisition fails.
         """
-        if self._settings.delegated_token:
+        if self._delegated_token:
             self._logger.debug("Using delegated Microsoft Graph token.")
-            return self._settings.delegated_token
+            return self._delegated_token
 
         if self._token and (time.time() + self._clock_skew_buffer) < self._expiry:
             self._logger.debug("Reusing cached Microsoft Graph token.")
@@ -62,23 +72,19 @@ class GraphTokenManager:
         return token
 
     def _request_client_credentials_token(self) -> tuple[str, float]:
-        if not (
-            self._settings.tenant_id
-            and self._settings.client_id
-            and self._settings.client_secret
-        ):
+        if not (self._tenant_id and self._client_id and self._client_secret):
             raise GraphAuthError(
-                "Client credential flow requires GRAPH_TENANT_ID, GRAPH_CLIENT_ID, "
-                "and GRAPH_CLIENT_SECRET to be configured."
+                "Client credential flow requires tenant_id, client_id, "
+                "and client_secret to be provided either as parameters or environment variables."
             )
 
         url = (
-            f"https://login.microsoftonline.com/{self._settings.tenant_id}"
+            f"https://login.microsoftonline.com/{self._tenant_id}"
             "/oauth2/v2.0/token"
         )
         data = {
-            "client_id": self._settings.client_id,
-            "client_secret": self._settings.client_secret,
+            "client_id": self._client_id,
+            "client_secret": self._client_secret,
             "grant_type": "client_credentials",
             "scope": "https://graph.microsoft.com/.default",
         }

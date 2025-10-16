@@ -19,16 +19,7 @@ from mcp_outlook.email import (
 
 mcp = FastMCP("Outlook Mailer")
 
-_token_manager: Optional[GraphTokenManager] = None
 _logger = logging.getLogger("mcp_outlook.server")
-
-
-def _get_token_manager() -> GraphTokenManager:
-    global _token_manager
-    if _token_manager is None:
-        settings = get_graph_settings()
-        _token_manager = GraphTokenManager(settings)
-    return _token_manager
 
 
 def _build_sendmail_url(sender: Optional[str]) -> str:
@@ -78,6 +69,10 @@ def send_outlook_mail_impl(
     save_to_sent_items: bool = True,
     sender: Optional[str] = None,
     dry_run: bool = False,
+    tenant_id: Optional[str] = None,
+    client_id: Optional[str] = None,
+    client_secret: Optional[str] = None,
+    access_token: Optional[str] = None,
 ) -> str:
     _logger.info(
         "Preparing sendMail request: subject=%s, to_count=%d, dry_run=%s",
@@ -120,7 +115,15 @@ def send_outlook_mail_impl(
         )
         return f"[DRY RUN] Payload ready for {resolved_sender or 'me'}:\n{preview}"
 
-    token_manager = _get_token_manager()
+    # Create per-request token manager with user-provided credentials
+    # Priority: parameters > environment variables
+    token_manager = GraphTokenManager(
+        settings=settings,
+        tenant_id=tenant_id,
+        client_id=client_id,
+        client_secret=client_secret,
+        access_token=access_token,
+    )
     try:
         token = token_manager.get_token()
     except GraphAuthError as exc:
@@ -183,9 +186,42 @@ def send_outlook_mail(
     save_to_sent_items: bool = True,
     sender: Optional[str] = None,
     dry_run: bool = False,
+    tenant_id: Optional[str] = None,
+    client_id: Optional[str] = None,
+    client_secret: Optional[str] = None,
+    access_token: Optional[str] = None,
 ) -> str:
     """
-    FastMCP tool wrapper around the Microsoft Graph sendMail workflow.
+    Send email via Microsoft Graph API.
+
+    Multi-tenant support: Users can provide credentials in two ways:
+    1. Delegated token: Pass access_token (from Graph Explorer or OAuth flow)
+    2. Client credentials: Pass tenant_id, client_id, client_secret
+
+    Server-side environment variables are used as fallback if parameters not provided.
+
+    Args:
+        subject: Email subject line
+        body: Email body content
+        to: List of recipient email addresses
+        cc: Optional list of CC recipients
+        bcc: Optional list of BCC recipients
+        body_type: Email body format (TEXT or HTML)
+        attachments: Optional list of file attachments
+        save_to_sent_items: Save to sent items folder (default: True)
+        sender: Optional sender email override
+        dry_run: Preview payload without sending (default: False)
+        tenant_id: Microsoft Entra tenant ID (for client credentials flow)
+        client_id: App registration client ID (for client credentials flow)
+        client_secret: Client secret (for client credentials flow)
+        access_token: Delegated access token (alternative to client credentials)
+
+    Returns:
+        Success message or dry-run preview
+
+    Raises:
+        ValueError: Invalid email payload
+        RuntimeError: Configuration, authentication, or API errors
     """
     return send_outlook_mail_impl(
         subject=subject,
@@ -198,6 +234,10 @@ def send_outlook_mail(
         save_to_sent_items=save_to_sent_items,
         sender=sender,
         dry_run=dry_run,
+        tenant_id=tenant_id,
+        client_id=client_id,
+        client_secret=client_secret,
+        access_token=access_token,
     )
 
 

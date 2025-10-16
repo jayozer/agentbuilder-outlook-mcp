@@ -1,4 +1,6 @@
-# MCP Outlook Server
+# Agentbuilder Outlook MCP Server
+
+[![FastMCP Deployment](https://img.shields.io/badge/FastMCP-Live-green)](https://agentbuilder-outlook-mcp.fastmcp.app/mcp)
 
 FastMCP server for sending Outlook mail via Microsoft Graph. This project exists because the Agent Builder Outlook connector does not provide a send-email capability; the MCP server delivers that missing tool by exposing a single `send_outlook_mail` entry point that validates payloads, obtains access tokens, and calls the Graph `sendMail` endpoint.
 
@@ -46,6 +48,70 @@ Send a live message (`dry_run=False`) once configuration is confirmed. To expose
 ```bash
 fastmcp run server.py
 ```
+
+## Remote Deployment
+
+The server is deployed on FastMCP at `https://agentbuilder-outlook-mcp.fastmcp.app/mcp`. Connect your MCP-compatible client (Claude Desktop, Cursor, etc.) using this URL.
+
+For local validation before hitting the remote server:
+
+```bash
+fastmcp run server.py
+```
+
+## Multi-Tenant Configuration
+
+This server supports **multi-tenant usage** where each user provides their own Microsoft credentials when calling the `send_outlook_mail` tool.
+
+### Two Authentication Methods
+
+#### Method 1: Delegated Access Token (Testing/Personal Use)
+
+Get a token from [Microsoft Graph Explorer](https://developer.microsoft.com/graph/graph-explorer):
+1. Sign in to Graph Explorer
+2. Grant `Mail.Send` permission
+3. Copy the access token from the "Access Token" tab
+
+Call the tool with your token:
+```python
+send_outlook_mail(
+    subject="Test Email",
+    body="Hello from multi-tenant MCP!",
+    to=["recipient@example.com"],
+    access_token="EwBIBMl6BAAU...",  # Your Graph Explorer token
+    sender="your.email@example.com"
+)
+```
+
+**Note:** Delegated tokens expire in ~1 hour.
+
+#### Method 2: Client Credentials (Production/Service)
+
+Create an Azure AD app registration with `Mail.Send` application permission, then:
+
+```python
+send_outlook_mail(
+    subject="Automated Email",
+    body="Sent via client credentials",
+    to=["recipient@example.com"],
+    tenant_id="your-tenant-id",
+    client_id="your-client-id",
+    client_secret="your-client-secret",
+    sender="mailbox@example.com"
+)
+```
+
+### Single-Tenant Fallback
+
+For backwards compatibility, if no credential parameters are provided, the server will fall back to environment variables:
+
+- `GRAPH_TENANT_ID`
+- `GRAPH_CLIENT_ID`
+- `GRAPH_CLIENT_SECRET`
+- `GRAPH_DEFAULT_SENDER`
+- `GRAPH_USER_ACCESS_TOKEN`
+
+This allows you to run a single-tenant server where all users share the same Outlook account.
 
 ## Testing
 ```bash

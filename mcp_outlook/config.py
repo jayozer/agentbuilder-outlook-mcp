@@ -26,21 +26,8 @@ class GraphSettings:
         default_sender = os.environ.get("GRAPH_DEFAULT_SENDER", "").strip() or None
         delegated_token = os.environ.get("GRAPH_USER_ACCESS_TOKEN", "").strip() or None
 
-        missing = [
-            name
-            for name, value in [
-                ("GRAPH_TENANT_ID", tenant_id),
-                ("GRAPH_CLIENT_ID", client_id),
-                ("GRAPH_CLIENT_SECRET", client_secret),
-            ]
-            if not value
-        ]
-        if missing and not delegated_token:
-            raise ConfigurationError(
-                "Missing Microsoft Graph configuration variables: "
-                + ", ".join(missing)
-            )
-
+        # For multi-tenant support, environment variables are optional.
+        # Users can provide credentials as tool parameters instead.
         return cls(
             tenant_id=tenant_id,
             client_id=client_id,
